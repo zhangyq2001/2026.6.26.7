@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Material Details - Nemesis</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.1/3Dmol-min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <style>
+        #viewer {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ccc;
+            position: relative;
+        }
+        #viewer-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: #666;
+            text-align: center;
+        }
+        .animate-hover {
+            transition: all 0.3s ease;
+        }
+        .animate-hover:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        /* 重复次数控制样式 */
+        .repeat-control {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 10px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .repeat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .repeat-item label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        .repeat-item input[type="range"] {
+            width: 100%;
+            min-width: 80px;
+        }
+        .repeat-item .value-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+        .repeat-item .value-display span {
+            min-width: 30px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .repeat-item .value-display button {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .repeat-item .value-display button:hover {
+            background: #e5e7eb;
+        }
+        .repeat-info {
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+            grid-column: 1 / -1;
+        }
+        @media (max-width: 640px) {
+            .repeat-control {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-8 flex flex-wrap justify-center gap-8">
+        <div class="info w-full md:w-1/2 bg-white p-6 rounded-lg shadow-md animate-hover">
+            <h2 id="formula" class="text-2xl font-bold text-center mb-4">加载中...</h2>
+            <p class="mb-2"><strong>Space Group:</strong> <span id="space_group"></span></p>
+            <p class="mb-2"><strong>Mass Density:</strong> <span id="density"></span> g/cm&sup3;</p>
+            <p class="mb-2"><strong>Nitrogen Concentration:</strong> <span id="n_concentration"></span>%</p>
+            <p class="mb-2"><strong>Oxygen Balance:</strong> <span id="oxygen_balance"></span>%</p>
+            <p class="mb-2"><strong>Energy Density (E<sub>d</sub>):</strong> <span id="ed"></span> kJ/g</p>
+            <p class="mb-2"><strong>Detonation Velocity (V<sub>d</sub>):</strong> <span id="vd"></span> km/s</p>
+            <p class="mb-2"><strong>Detonation Pressure (P<sub>d</sub>):</strong> <span id="pd"></span> GPa</p>
+            <p class="mb-2"><strong>Reaction:</strong> <span id="reaction"></span></p>
+            <p class="mb-2"><strong>Energy:</strong> <span id="energy"></span></p>
+            <p class="mb-4"><strong>doi:</strong> <span id="doi"></span></p>
+            
+            <div class="button-container flex flex-wrap justify-center gap-4">
+                <button id="download-cif" class="btn bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md animate-hover" disabled>
+                    <i class="fa-solid fa-download mr-2"></i> Download the CIF file
+                </button>
+                <button id="toggle-lattice" class="btn bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md animate-hover" disabled>
+                    <i class="fa-solid fa-table-cells mr-2"></i> Display the lattice pattern
+                </button>
+                <button id="toggle-labels" class="btn bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md animate-hover" disabled>
+                    <i class="fa-solid fa-tag mr-2"></i> Display atomic labels
+                </button>
+            </div>
+
+            <!-- 重复次数控制 - 三个方向独立 -->
+            <div class="repeat-control">
+                <div class="repeat-item">
+                    <label><i class="fa-solid fa-arrow-right"></i> a-axis</label>
+                    <input type="range" id="repeat-a" min="1" max="5" value="2" step="1">
+                    <div class="value-display">
+                        <button onclick="changeRepeat('a', -1)">−</button>
+                        <span id="repeat-a-value">2</span>
+                        <button onclick="changeRepeat('a', 1)">+</button>
+                    </div>
+                </div>
+                <div class="repeat-item">
+                    <label><i class="fa-solid fa-arrow-up"></i> b-axis</label>
+                    <input type="range" id="repeat-b" min="1" max="5" value="2" step="1">
+                    <div class="value-display">
+                        <button onclick="changeRepeat('b', -1)">−</button>
+                        <span id="repeat-b-value">2</span>
+                        <button onclick="changeRepeat('b', 1)">+</button>
+                    </div>
+                </div>
+                <div class="repeat-item">
+                    <label><i class="fa-solid fa-arrow-left"></i> c-axis</label>
+                    <input type="range" id="repeat-c" min="1" max="5" value="2" step="1">
+                    <div class="value-display">
+                        <button onclick="changeRepeat('c', -1)">−</button>
+                        <span id="repeat-c-value">2</span>
+                        <button onclick="changeRepeat('c', 1)">+</button>
+                    </div>
+                </div>
+                <div class="repeat-info">
+                    <i class="fa-solid fa-info-circle mr-1"></i>
+                    Total: <span id="total-cells">8</span> unit cells (1-125 cells)
+                </div>
+            </div>
+
+            <div class="incar-section mt-6 border-t border-gray-200 pt-6">
+                <details class="bg-gray-50 p-4 rounded-md mb-4">
+                    <summary class="cursor-pointer font-bold text-gray-700">VASP Calculation Parameters (INCAR)</summary>
+                    <pre class="incar-content bg-gray-100 border border-gray-300 p-4 rounded-md text-sm">
+PREC   = Normal
+ENCUT  = 520 eV
+NELMIN = 5
+LREAL = F    
+KSPACING = 0.15
+EDIFF  = 1E-5
+SIGMA = 0.2
+ISPIN = 1    
+KPAR = 4
+NPAR = 1
+IVDW = 11
+# Ionic Relaxation
+ICHARG = 2
+EDIFFG = -0.01        
+NSW    = 300          
+IBRION = 2
+POTIM = 0.5
+ISIF   = 3            
+PSTRESS = 0
+LCHARG =  F
+LWAVE  =  F</pre>
+                </details>
+                <button class="btn bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md animate-hover" onclick="downloadINCAR()">
+                    <i class="fa-solid fa-download mr-2"></i> Download INCAR
+                </button>
+            </div>
+        </div>
+
+        <div class="viewer-container w-full md:w-1/2 bg-white p-6 rounded-lg shadow-md animate-hover">
+            <div id="viewer">
+                <div id="viewer-message">加载结构中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 从 URL 获取 ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+
+                // 从 ID_CIF-name.txt 自动生成的别名映射
+        const aliasMap = {
+            "1": "APEZOL",
+            "2": "CL-20",
+            "3": "FOX-7",
+            "4": "HMX",
+            "5": "MTO",
+            "6": "NG",
+            "7": "PETN",
+            "8": "RDX",
+            "9": "TATNBZ",
+            "10": "TNAZ",
+            "11": "TNT",
+        };
+
+        // 获取别名的函数
+        function getAlias(id) {
+            return aliasMap[id] || null;
+        }
+
+        
+        let currentCIF = '';
+        let viewer = null;
+        let latticeVisible = false;
+        let labelsVisible = false;
+        let currentMaterial = null;
+        let repeatA = 2;
+        let repeatB = 2;
+        let repeatC = 2;
+
+        // 化学式别名映射表
+        const formulaAliases = {
+            "C8H16N16O16": "FOX-7",
+            "C12H20N12O36": "CL-20",
+            "C20H32N16O48": "HMX",
+            "C12H12N12O12": "TATB",
+            "C24H32N32O48": "RDX"
+        };
+
+        // 直接从 db.json 获取数据
+        fetch('db.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const material = data[id];
+                if (!material) {
+                    showErrorMessage("未找到材料数据 (ID: " + id + ")");
+                    return;
+                }
+                currentMaterial = material;
+                updateMaterialInfo(material);
+                initializeViewer(material, repeatA, repeatB, repeatC);
+                updateTotalCells();
+            })
+            .catch(err => {
+                console.error("数据获取失败:", err);
+                showErrorMessage("数据加载失败: " + err.message);
+            });
+
+        // 改变重复次数
+        function changeRepeat(axis, delta) {
+            let input, display, current;
+            if (axis === 'a') {
+                input = document.getElementById('repeat-a');
+                current = repeatA;
+            } else if (axis === 'b') {
+                input = document.getElementById('repeat-b');
+                current = repeatB;
+            } else {
+                input = document.getElementById('repeat-c');
+                current = repeatC;
+            }
+            
+            let newVal = current + delta;
+            if (newVal >= 1 && newVal <= 5) {
+                input.value = newVal;
+                if (axis === 'a') {
+                    repeatA = newVal;
+                    document.getElementById('repeat-a-value').textContent = newVal;
+                } else if (axis === 'b') {
+                    repeatB = newVal;
+                    document.getElementById('repeat-b-value').textContent = newVal;
+                } else {
+                    repeatC = newVal;
+                    document.getElementById('repeat-c-value').textContent = newVal;
+                }
+                if (currentMaterial) {
+                    initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+                }
+                updateTotalCells();
+            }
+        }
+
+        // 更新总晶胞数
+        function updateTotalCells() {
+            const total = repeatA * repeatB * repeatC;
+            document.getElementById('total-cells').textContent = total;
+        }
+
+        // 滑块事件监听
+        document.getElementById('repeat-a').addEventListener('input', function() {
+            repeatA = parseInt(this.value);
+            document.getElementById('repeat-a-value').textContent = repeatA;
+            if (currentMaterial) {
+                initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+            }
+            updateTotalCells();
+        });
+
+        document.getElementById('repeat-b').addEventListener('input', function() {
+            repeatB = parseInt(this.value);
+            document.getElementById('repeat-b-value').textContent = repeatB;
+            if (currentMaterial) {
+                initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+            }
+            updateTotalCells();
+        });
+
+        document.getElementById('repeat-c').addEventListener('input', function() {
+            repeatC = parseInt(this.value);
+            document.getElementById('repeat-c-value').textContent = repeatC;
+            if (currentMaterial) {
+                initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+            }
+            updateTotalCells();
+        });
+
+        function showErrorMessage(msg) {
+            document.getElementById('formula').innerText = msg;
+            document.getElementById('viewer-message').innerText = msg;
+        }
+
+        function formatFormula(formula) {
+            return formula.replace(/([A-Za-z]+)(\d*)/g, (_, elem, num) => 
+                num ? `${elem}<sub>${num}</sub>` : elem
+            );
+        }
+
+        function getFormulaWithAlias(formula) {
+            const alias = formulaAliases[formula];
+            const formattedFormula = formatFormula(formula);
+            return alias ? `${formattedFormula} (${alias})` : formattedFormula;
+        }
+
+        function updateMaterialInfo(material) {
+            const formattedFormula = formatFormula(material.formula);
+            // 从 aliasMap 获取别名
+            const alias = getAlias(id);
+            if (alias) {
+                document.getElementById('formula').innerHTML = formattedFormula + '<br><span style="font-size:18px;color:#2563eb;font-weight:600;">' + alias + '</span>';
+            } else {
+                document.getElementById('formula').innerHTML = formattedFormula;
+            }
+            
+            document.getElementById('space_group').innerHTML =
+                material.space_group_symbol && material.space_group_number
+                    ? `${material.space_group_symbol} (No. ${material.space_group_number})`
+                    : 'N/A';
+            document.getElementById('density').innerText = material.mass_density?.toFixed(3) ?? 'N/A';
+            document.getElementById('n_concentration').innerText = material.N_concentration?.toFixed(3) ?? 'N/A';
+            
+            const oxygenBalance = material.Oxygen_balance;
+            document.getElementById('oxygen_balance').innerText = 
+                (oxygenBalance !== undefined && oxygenBalance !== null && !isNaN(oxygenBalance)) 
+                    ? oxygenBalance.toFixed(3) : '-';
+            
+            document.getElementById('ed').innerText = material.E_d?.toFixed(3) ?? 'N/A';
+            document.getElementById('vd').innerText = material.V_d?.toFixed(3) ?? 'N/A';
+            document.getElementById('pd').innerText = material.P_d?.toFixed(3) ?? 'N/A';
+            document.getElementById('reaction').innerHTML = material.reaction?.replace(/->/g, '→') ?? 'N/A';
+            
+            const energyVal = material.energy;
+            document.getElementById('energy').innerHTML = 
+                (typeof energyVal === 'number') ? energyVal.toFixed(3) : (energyVal ?? 'N/A');
+            
+            document.getElementById('doi').innerHTML = material.doi ?? 'N/A';
+        }
+
+        function generateExtendedCIF(data, repeat_a, repeat_b, repeat_c) {
+            const { cell, symbols, positions } = data;
+            
+            if (!cell || !symbols || !positions) {
+                console.error("CIF 数据不完整");
+                return "";
+            }
+            
+            // 如果都是1x1x1，直接生成原始CIF
+            if (repeat_a === 1 && repeat_b === 1 && repeat_c === 1) {
+                return generateCIF(data);
+            }
+            
+            let cif = "data_generated\n";
+            
+            // 计算晶格参数
+            const a = Math.sqrt(cell[0][0]**2 + cell[0][1]**2 + cell[0][2]**2);
+            const b = Math.sqrt(cell[1][0]**2 + cell[1][1]**2 + cell[1][2]**2);
+            const c = Math.sqrt(cell[2][0]**2 + cell[2][1]**2 + cell[2][2]**2);
+            
+            // 扩展晶胞
+            const new_a = a * repeat_a;
+            const new_b = b * repeat_b;
+            const new_c = c * repeat_c;
+            
+            cif += `_cell_length_a ${new_a.toFixed(6)}\n`;
+            cif += `_cell_length_b ${new_b.toFixed(6)}\n`;
+            cif += `_cell_length_c ${new_c.toFixed(6)}\n`;
+            cif += "_cell_angle_alpha 90.000000\n";
+            cif += "_cell_angle_beta 90.000000\n";
+            cif += "_cell_angle_gamma 90.000000\n";
+            cif += "loop_\n_atom_site_label\n_atom_site_fract_x\n_atom_site_fract_y\n_atom_site_fract_z\n";
+            
+            // 生成扩展的原子坐标
+            let atomIndex = 1;
+            for (let ix = 0; ix < repeat_a; ix++) {
+                for (let iy = 0; iy < repeat_b; iy++) {
+                    for (let iz = 0; iz < repeat_c; iz++) {
+                        for (let i = 0; i < symbols.length; i++) {
+                            const [x, y, z] = positions[i];
+                            // 计算分数坐标
+                            const fx = (x + ix * a) / new_a;
+                            const fy = (y + iy * b) / new_b;
+                            const fz = (z + iz * c) / new_c;
+                            cif += `${symbols[i]}${atomIndex} ${fx.toFixed(6)} ${fy.toFixed(6)} ${fz.toFixed(6)}\n`;
+                            atomIndex++;
+                        }
+                    }
+                }
+            }
+            return cif;
+        }
+
+        function generateCIF(data) {
+            const { cell, symbols, positions } = data;
+            
+            if (!cell || !symbols || !positions) {
+                console.error("CIF 数据不完整");
+                return "";
+            }
+            
+            let cif = "data_generated\n";
+            
+            // 计算晶格参数
+            const a = Math.sqrt(cell[0][0]**2 + cell[0][1]**2 + cell[0][2]**2);
+            const b = Math.sqrt(cell[1][0]**2 + cell[1][1]**2 + cell[1][2]**2);
+            const c = Math.sqrt(cell[2][0]**2 + cell[2][1]**2 + cell[2][2]**2);
+            
+            cif += `_cell_length_a ${a.toFixed(6)}\n`;
+            cif += `_cell_length_b ${b.toFixed(6)}\n`;
+            cif += `_cell_length_c ${c.toFixed(6)}\n`;
+            cif += "_cell_angle_alpha 90.000000\n";
+            cif += "_cell_angle_beta 90.000000\n";
+            cif += "_cell_angle_gamma 90.000000\n";
+            cif += "loop_\n_atom_site_label\n_atom_site_fract_x\n_atom_site_fract_y\n_atom_site_fract_z\n";
+
+            for (let i = 0; i < symbols.length; i++) {
+                const [x, y, z] = positions[i];
+                const fx = x / a;
+                const fy = y / b;
+                const fz = z / c;
+                cif += `${symbols[i]} ${fx.toFixed(6)} ${fy.toFixed(6)} ${fz.toFixed(6)}\n`;
+            }
+            return cif;
+        }
+
+        function initializeViewer(material, repeat_a, repeat_b, repeat_c) {
+            try {
+                // 根据重复次数生成CIF
+                if (repeat_a > 1 || repeat_b > 1 || repeat_c > 1) {
+                    currentCIF = generateExtendedCIF(material, repeat_a, repeat_b, repeat_c);
+                } else {
+                    currentCIF = generateCIF(material);
+                }
+                
+                if (!currentCIF) {
+                    document.getElementById('viewer-message').innerText = "无法生成 CIF 数据";
+                    return;
+                }
+                
+                // 重新创建viewer
+                viewer = $3Dmol.createViewer(document.getElementById("viewer"), { 
+                    backgroundColor: "white",
+                    defaultZoom: 1.2
+                });
+                
+                viewer.addModel(currentCIF, "cif");
+                viewer.setStyle({}, { 
+                    stick: { radius: 0.15 }, 
+                    sphere: { 
+                        scale: 0.3,
+                        colorscheme: "Jmol"
+                    } 
+                });
+                viewer.zoomTo();
+                viewer.center();
+                viewer.render();
+                
+                // 恢复晶胞和标签显示状态
+                if (latticeVisible) {
+                    viewer.addUnitCell({
+                        box: { color: 0x0000ff, radius: 0.1 },
+                        a: { color: 0xff0000, radius: 0.1 },
+                        b: { color: 0x00ff00, radius: 0.1 },
+                        c: { color: 0x0000ff, radius: 0.1 }
+                    });
+                }
+                
+                if (labelsVisible) {
+                    const atoms = viewer.getModel().selectedAtoms({});
+                    atoms.forEach(atom => {
+                        viewer.addLabel(atom.elem, {
+                            position: atom,
+                            fontSize: 0.8,
+                            fontColor: 'blue',
+                            backgroundColor: 0xeeeeee,
+                            backgroundOpacity: 0.7,
+                            inFront: true
+                        });
+                    });
+                }
+                
+                viewer.render();
+                enableControls();
+                document.getElementById("viewer-message")?.remove();
+            } catch (err) {
+                console.error("3D结构渲染失败:", err);
+                document.getElementById('viewer-message').innerText = "3D结构加载失败: " + err.message;
+            }
+        }
+
+        function renderAtomsAndBonds() {
+            if (!viewer) return;
+
+            viewer.removeAllShapes();
+            viewer.removeAllLabels();
+
+            viewer.setStyle({}, { 
+                stick: { radius: 0.15 }, 
+                sphere: { 
+                    scale: 0.3,
+                    colorscheme: "Jmol"
+                } 
+            });
+
+            if (labelsVisible) {
+                const atoms = viewer.getModel().selectedAtoms({});
+                atoms.forEach(atom => {
+                    viewer.addLabel(atom.elem, {
+                        position: atom,
+                        fontSize: 0.8,
+                        fontColor: 'blue',
+                        backgroundColor: 0xeeeeee,
+                        backgroundOpacity: 0.7,
+                        inFront: true
+                    });
+                });
+            }
+
+            if (latticeVisible) {
+                viewer.addUnitCell({
+                    box: { color: 0x0000ff, radius: 0.1 },
+                    a: { color: 0xff0000, radius: 0.1 },
+                    b: { color: 0x00ff00, radius: 0.1 },
+                    c: { color: 0x0000ff, radius: 0.1 }
+                });
+            }
+
+            viewer.render();
+        }
+
+        function enableControls() {
+            document.getElementById('download-cif').disabled = false;
+            document.getElementById('toggle-lattice').disabled = false;
+            document.getElementById('toggle-labels').disabled = false;
+        }
+
+        document.getElementById('download-cif').addEventListener('click', () => {
+            if (!currentCIF) return;
+            const blob = new Blob([currentCIF], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `material_${id}.cif`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('toggle-lattice').addEventListener('click', function() {
+            latticeVisible = !latticeVisible;
+            this.innerHTML = latticeVisible ? 
+                '<i class="fa-solid fa-table-cells mr-2"></i> Hide the lattice pattern' : 
+                '<i class="fa-solid fa-table-cells mr-2"></i> Display the lattice pattern';
+            if (currentMaterial) {
+                initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+            }
+        });
+
+        document.getElementById('toggle-labels').addEventListener('click', function() {
+            labelsVisible = !labelsVisible;
+            this.innerHTML = labelsVisible ? 
+                '<i class="fa-solid fa-tag mr-2"></i> Hide atomic labels' : 
+                '<i class="fa-solid fa-tag mr-2"></i> Display atomic labels';
+            if (currentMaterial) {
+                initializeViewer(currentMaterial, repeatA, repeatB, repeatC);
+            }
+        });
+
+        function downloadINCAR() {
+            const content = document.querySelector('.incar-content').textContent;
+            const blob = new Blob([content], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `INCAR_${id}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
